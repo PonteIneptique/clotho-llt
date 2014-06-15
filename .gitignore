@@ -1,0 +1,9 @@
+tmp/*
+./tmp/*
+*.xml
+*.pdf
+json/*
+./json*
+pdf/*
+./pdf
+*.zip
