@@ -7,3 +7,7 @@ json/*
 pdf/*
 ./pdf
 *.zip
+crap/*
+*.json
+*.csv
+*.txt
