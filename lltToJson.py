@@ -30,6 +30,7 @@ class lltToJson(object):
 		self.nocache = nocache
 		self.onlyauthor = author
 		self.recheck = False
+		self.filter = False
 
 		self.output = output 
 		self.outputCSV = output + ".csv"
@@ -218,13 +219,14 @@ class lltToJson(object):
 				occurences[identifier] += self.getFile(join(path,f))
 		return occurences
 
-	def getCache(self, occurences = {}, output = False):
+	def getCache(self, occurences = {}, output = False, identifier = True):
 		path = self.json
-		for identifier in occurences:
-			filename = path + identifier + ".json"
-			with codecs.open(filename, "w", "utf-8") as f:
-				d = f.write(json.dumps(occurences[identifier]))
-				f.close()
+		if identifier == True:
+			for identifier in occurences:
+				filename = path + identifier + ".json"
+				with codecs.open(filename, "w", "utf-8") as f:
+					d = f.write(json.dumps(occurences[identifier]))
+					f.close()
 		if output:
 			with codecs.open(self.outputJSON, "w", "utf-8") as f:
 				d = f.write(json.dumps(occurences))
@@ -258,12 +260,15 @@ class lltToJson(object):
 			f.close()
 			return d
 
+	def getAuthor(self, string):
+		return string.replace(";", ",").split("-")[0].strip()
+
 	def getAuthors(self, occurences):
 		authors = []
 
 		for identifier in occurences:
 			for occurence in occurences[identifier]:
-				a = self.getString(occurence, "author").replace(";", ",").split("-")[0].split("(")[0].split("'")[0].strip()
+				a = self.getAuthor(self.getString(occurence, "author"))
 				if a not in authors:
 					authors.append(a)
 
@@ -366,8 +371,48 @@ class lltToJson(object):
 
 		return occ
 
+	def getFiltered(self, filterFile, occurences):
+		""" Get filtered output according to authors name
+		"""
 
+		#First we get the filters
+		lines = []
+		filters = []
+		groups = []
+		with codecs.open(filterFile, "r", "utf-8") as f:
+			for line in f:
+				if len(line.replace(" ", "")) > 2:
+					lines.append(line.replace("\n", ""))
+			f.close()
+		if len(lines) == 0:
+			print "No filters found"
+			sys.exit()
+		lines = sorted(lines, key = len)[::-1]
 
+		filters = [line.split(";") for line in lines]
+		groups = set([f[1] for f in filters])
+
+		#Then we copy the structure of our occurences
+		nongrouped = occurences
+		grouped = {}
+		for g in groups:
+			grouped[g] = {}
+			for term in occurences:
+				grouped[g][term] = []
+
+		for term in occurences:
+			l = occurences[term]
+			for occ in l:
+				b = False
+				for author in filters:
+					if len(occ["author"]) >= len(author[0]) and author[0] == occ["author"].strip()[0:len(author[0])]:
+						grouped[author[1]][term].append(occ)
+						b = True
+						break
+				if b == False:
+					print occ["author"] + " has no equivalent..."
+
+		return grouped
 
 
 
@@ -379,11 +424,11 @@ def main(argv):
 	outputJSON = False
 	outputCSV = False
 
+
 	try:
-		opts, args = getopt.getopt(argv,"hi:o",["input=","output=", "check", "authors", "csv", "json", "nocache", "cache=", "temp="])
+		opts, args = getopt.getopt(argv,"hi:o",["input=","output=", "check", "authors", "csv", "json", "nocache", "cache=", "temp=", "filter="])
 	except getopt.GetoptError:
 		opts = False
-
 
 	if opts != False:
 		for opt, arg in opts:
@@ -398,6 +443,7 @@ Optional parameters :
 --nocache\tDon't use cache files
 --authors\tOutput a txt file with authors
 --check\tCheck the results manually again
+--filter\tFilter results according to a CSV file where column 1 is author name, seconde one a group identifier
 
 Really optional parameters
 --cache\t Place to cache intermediary results (Default : ./json/)
@@ -427,7 +473,10 @@ Really optional parameters
 				llt.onlyauthor = True
 			elif opt in ("--check"):
 				llt.recheck = True
+			elif opt in ("--filter"):
+				llt.filter = arg
 
+	print llt.source
 	if llt.nocache == False:
 		llt.makeDirs()
 
@@ -436,10 +485,19 @@ Really optional parameters
 	else:
 		occurences = llt.getFolder()
 
-	if llt.recheck == True:
-		occurences = llt.getChecked(occurences)
-
-	if llt.onlyauthor:
+	if llt.filter != False:
+		groups = llt.getFiltered(llt.filter, occurences)
+		for group in groups:
+			occurences = groups[group]
+			llt.getOutput(llt.output + "-" + group)
+			if outputCSV:
+				llt.getCSV(occurences)
+			elif outputJSON:
+				llt.getCache(occurences, True, False)
+			else:
+				llt.getCache(occurences, True, False)
+				llt.getCSV(occurences)
+	elif llt.onlyauthor:
 		llt.getAuthors(occurences)
 	elif outputCSV:
 		llt.getCache(occurences, False)
